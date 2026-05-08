@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+body {
+  @apply m-0 min-h-svh antialiased bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100;
+}
+
+#root {
+  @apply min-h-svh;
+}

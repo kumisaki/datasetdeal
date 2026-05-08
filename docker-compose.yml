@@ -1,0 +1,35 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-demo-key}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-demo.firebaseapp.com}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-demo-datasetdeal}
+        VITE_FIREBASE_STORAGE_BUCKET: ${VITE_FIREBASE_STORAGE_BUCKET:-demo-datasetdeal.appspot.com}
+        VITE_FIREBASE_MESSAGING_SENDER_ID: ${VITE_FIREBASE_MESSAGING_SENDER_ID:-000000000000}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-1:000000000000:web:000000000000}
+        VITE_USE_FIREBASE: ${VITE_USE_FIREBASE:-false}
+        VITE_USE_EMULATORS: ${VITE_USE_EMULATORS:-false}
+        VITE_FIREBASE_EMULATOR_HOST: ${VITE_FIREBASE_EMULATOR_HOST:-127.0.0.1}
+    ports:
+      - "3000:8080"
+
+  emulators:
+    profiles:
+      - local
+    image: node:22-bookworm-slim
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: >
+      bash -c "apt-get update -qq && apt-get install -y -qq openjdk-17-jre-headless
+      && npm ci && npx --yes firebase-tools@13.29.2 emulators:start
+      --only auth,firestore,storage
+      --project demo-datasetdeal"
+    ports:
+      - "4000:4000"
+      - "8080:8080"
+      - "9099:9099"
+      - "9199:9199"

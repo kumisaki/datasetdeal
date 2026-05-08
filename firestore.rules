@@ -1,0 +1,111 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function requirementData(reqId) {
+      return get(/databases/$(database)/documents/requirements/$(reqId)).data;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if isUser(uid);
+      allow update: if isUser(uid)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+
+      match /notifications/{nid} {
+        allow read: if isUser(uid);
+        allow create: if signedIn() && request.auth.uid == request.resource.data.actorId;
+        allow update: if isUser(uid);
+        allow delete: if false;
+      }
+    }
+
+    function requirementReadableByUser(reqId) {
+      let d = requirementData(reqId);
+      return signedIn()
+        && (d.publisherId == request.auth.uid || d.status in ['open', 'in_progress', 'fulfilled']);
+    }
+
+    match /requirements/{reqId} {
+      allow read: if resource.data.publisherId == request.auth.uid
+        || resource.data.status in ['open', 'in_progress', 'fulfilled'];
+      allow create: if signedIn()
+        && request.resource.data.publisherId == request.auth.uid
+        && request.resource.data.status == 'draft';
+      allow update: if signedIn()
+        && resource.data.publisherId == request.auth.uid
+        && request.resource.data.publisherId == resource.data.publisherId;
+      allow delete: if signedIn() && resource.data.publisherId == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow read: if requirementReadableByUser(reqId);
+        allow create: if signedIn()
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.keys().hasAll([
+            'requirementId', 'authorId', 'authorDisplayName', 'text', 'parentCommentId',
+            'replyToAuthorId', 'replyToAuthorDisplayName', 'createdAt'
+          ])
+          && request.resource.data.requirementId == reqId
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() < 4000
+          && requirementReadableByUser(reqId);
+        allow update, delete: if false;
+      }
+    }
+
+    match /requirements/{reqId}/threads/{contributorUid} {
+      allow read: if signedIn() && (
+        request.auth.uid == contributorUid ||
+        requirementData(reqId).publisherId == request.auth.uid
+      );
+      allow create, update: if signedIn() && (
+        request.auth.uid == contributorUid ||
+        requirementData(reqId).publisherId == request.auth.uid
+      );
+      allow delete: if false;
+
+      match /messages/{msgId} {
+        allow read: if signedIn() && (
+          request.auth.uid == contributorUid ||
+          requirementData(reqId).publisherId == request.auth.uid
+        );
+        allow create: if signedIn()
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.keys().hasAll(['senderId', 'text'])
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() < 6000
+          && (request.auth.uid == contributorUid || requirementData(reqId).publisherId == request.auth.uid);
+        allow update, delete: if false;
+      }
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if signedIn() && (
+        resource.data.publisherId == request.auth.uid ||
+        resource.data.contributorId == request.auth.uid
+      );
+      allow create: if signedIn()
+        && request.resource.data.contributorId == request.auth.uid
+        && request.resource.data.status == 'requested'
+        && requirementData(request.resource.data.requirementId).publisherId == request.resource.data.publisherId
+        && requirementData(request.resource.data.requirementId).status == 'open';
+      allow update: if signedIn()
+        && resource.data.publisherId == request.auth.uid
+        && request.resource.data.publisherId == resource.data.publisherId
+        && request.resource.data.contributorId == resource.data.contributorId
+        && request.resource.data.requirementId == resource.data.requirementId;
+      allow delete: if false;
+    }
+  }
+}
